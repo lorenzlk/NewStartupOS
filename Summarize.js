@@ -246,20 +246,26 @@ function extractChunksFromDoc(doc) {
 function buildSummarizationPrompt(content, context) {
   const contextString = context || 'None provided.';
   return `
-1. Carefully review the "New Content" and compare it to the "Relevant Context" below, which may include historical summaries or related discussions from Pinecone.
-2. If there is documented history or prior context, connect the dots—refer to past decisions, ongoing threads, or unresolved questions, and make the conversation feel like it's building over time.
-3. Summarize the key decisions, changes, or updates found in the "New Content", focusing on what changed and why.
-4. Extract any specific "Action Items" mentioned in the "New Content". If an owner or deadline is mentioned for an action, include it.
+1. Review the "New Content" and the "Relevant Context" below, which may include historical summaries or prior discussions from Pinecone.
+2. Identify and explicitly connect ongoing threads, unresolved issues, or recurring themes. If any previous action items are now resolved or still pending, mention their status.
+3. Prioritize and summarize the most important decisions, blockers, or new directions. Group related updates under themes or projects when possible.
+4. When referencing a channel or thread, include the channel name or a citation for traceability.
+5. List all current and outstanding action items, marking any carried over from previous context as "Still Pending".
 
-Respond in exactly two labeled sections:
+Respond in exactly three labeled sections:
 
-Summary of Changes (with Context):
-- [Concise summary connecting new information to historical context, highlighting ongoing themes or threads]
+Summary of Changes (with Context and Progress):
+- [Concise, prioritized summary connecting new information to historical context, highlighting progress, blockers, and ongoing themes]
 
-Action Items:
-- [Action item 1 (Owner: X, Deadline: Y)]
-- [Action item 2]
-- (Use "No action items." if none are explicitly mentioned in the New Content)
+Outstanding Action Items:
+- [Pending action item 1 (Owner: X, Deadline: Y, Still Pending)]
+- [Pending action item 2]
+- (Mark as "Still Pending" if carried over from previous summaries)
+
+New Action Items:
+- [New action item 1 (Owner: X, Deadline: Y)]
+- [New action item 2]
+- (Use "No new action items." if none are present)
 
 ---
 Relevant Context (from Pinecone, including prior summaries or discussions):
