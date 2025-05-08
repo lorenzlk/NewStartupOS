@@ -207,18 +207,23 @@ function getRegisteredDocs() {
 function fetchAllSlackMessagesForToday() {
   const token = cfg.SLACK.BOT_TOKEN;
   const since = (Date.now() / 1000) - 24 * 3600;
+  logDebug('[SlackFetch] Starting fetchAllSlackMessagesForToday. Since:', since);
   const channels = listAllPublicChannels(token);
-
+  logDebug('[SlackFetch] Channels to process:', channels.map(ch => ({id: ch.id, name: ch.name})));
   const all = [];
   channels.forEach(ch => {
+    logDebug(`[SlackFetch] Fetching messages for channel`, {id: ch.id, name: ch.name});
     try {
       const resp = UrlFetchApp.fetch('https://slack.com/api/conversations.history', {
         method: 'post',
         headers: { Authorization: 'Bearer ' + token },
-        payload: { channel: ch.id, oldest: since }
+        payload: { channel: ch.id, oldest: since },
+        muteHttpExceptions: true
       });
       const data = JSON.parse(resp.getContentText());
+      logDebug(`[SlackFetch] API response for channel ${ch.name || ch.id}:`, data);
       if (data.ok && data.messages) {
+        logDebug(`[SlackFetch] ${data.messages.length} messages found in ${ch.name || ch.id}`);
         data.messages.forEach(m => {
           all.push({
             channel: ch.name || ch.id,
@@ -227,11 +232,14 @@ function fetchAllSlackMessagesForToday() {
             ts: m.ts
           });
         });
+      } else {
+        logDebug(`[SlackFetch] No messages or error for channel ${ch.name || ch.id}:`, data.error || data);
       }
     } catch (e) {
-      logDebug(`Failed to fetch history for ${ch.name}`, e);
+      logDebug(`[SlackFetch] Exception fetching history for ${ch.name || ch.id}:`, e);
     }
   });
+  logDebug(`[SlackFetch] Total messages fetched: ${all.length}`);
   return all;
 }
 
