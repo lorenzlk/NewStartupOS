@@ -224,6 +224,7 @@ function fetchAllSlackMessagesForToday() {
     logDebug(`[SlackFetch] Fetching messages for channel`, {id: ch.id, name: ch.name});
     let cursor = '';
     let page = 1;
+    let channelMessages = [];
     do {
       try {
         const payload = { channel: ch.id, oldest: since, limit: 1000 };
@@ -235,12 +236,8 @@ function fetchAllSlackMessagesForToday() {
           muteHttpExceptions: true
         });
         const data = JSON.parse(resp.getContentText());
-        logDebug(`[SlackFetch] API response (page ${page}) for channel ${ch.name || ch.id}:`, {
-          ok: data.ok,
-          messages: data.messages ? data.messages.length : 0,
-          has_more: data.has_more,
-          error: data.error
-        });
+        // Only log summary info
+        logDebug(`[SlackFetch] (page ${page}) channel ${ch.name || ch.id}: ok=${data.ok}, messages=${data.messages ? data.messages.length : 0}, has_more=${data.has_more}, error=${data.error}`);
         if (data.ok && data.messages) {
           data.messages.forEach(m => {
             all.push({
@@ -249,6 +246,7 @@ function fetchAllSlackMessagesForToday() {
               text: m.text,
               ts: m.ts
             });
+            channelMessages.push(m);
           });
         } else {
           logDebug(`[SlackFetch] No messages or error for channel ${ch.name || ch.id} (page ${page}):`, data.error || data);
@@ -261,6 +259,27 @@ function fetchAllSlackMessagesForToday() {
         break;
       }
     } while (cursor);
+    // After fetching all pages for this channel, log summary
+    if (channelMessages.length > 0) {
+      // Sort by ts ascending
+      channelMessages.sort(function(a, b) { return parseFloat(a.ts) - parseFloat(b.ts); });
+      var firstMsg = channelMessages[0];
+      var lastMsg = channelMessages[channelMessages.length - 1];
+      logDebug(`[SlackFetch] Channel ${ch.name || ch.id}: ${channelMessages.length} messages. First ts: ${firstMsg.ts} (${new Date(parseFloat(firstMsg.ts) * 1000).toLocaleString()}), Last ts: ${lastMsg.ts} (${new Date(parseFloat(lastMsg.ts) * 1000).toLocaleString()})`);
+      // Log a sample message
+      logDebug(`[SlackFetch] Sample message from ${ch.name || ch.id}:`, {
+        ts: firstMsg.ts,
+        user: firstMsg.user,
+        text: firstMsg.text
+      });
+      // Warn if any message is older than 'since'
+      var sinceNum = parseFloat(since);
+      var oldMsgs = channelMessages.filter(m => parseFloat(m.ts) < sinceNum);
+      if (oldMsgs.length > 0) {
+        logDebug(`[SlackFetch][WARNING] ${oldMsgs.length} messages older than 'since' in channel ${ch.name || ch.id}. Example old ts: ${oldMsgs[0].ts}`);
+      }
+    }
+
   });
   logDebug(`[SlackFetch] Total messages fetched: ${all.length}`);
   return all;
