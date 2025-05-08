@@ -206,38 +206,61 @@ function getRegisteredDocs() {
  */
 function fetchAllSlackMessagesForToday() {
   const token = cfg.SLACK.BOT_TOKEN;
-  const since = (Date.now() / 1000) - 24 * 3600;
-  logDebug('[SlackFetch] Starting fetchAllSlackMessagesForToday. Since:', since);
+  // Log current local and UTC time
+  const nowLocal = new Date();
+  const nowUTC = new Date(nowLocal.getTime() + nowLocal.getTimezoneOffset() * 60000);
+  const sinceEpoch = Math.floor(Date.now() / 1000) - 24 * 3600;
+  const since = sinceEpoch.toString();
+  logDebug('[SlackFetch] Starting fetchAllSlackMessagesForToday.', {
+    localTime: nowLocal.toString(),
+    utcTime: nowUTC.toUTCString(),
+    sinceEpoch,
+    since
+  });
   const channels = listAllPublicChannels(token);
   logDebug('[SlackFetch] Channels to process:', channels.map(ch => ({id: ch.id, name: ch.name})));
   const all = [];
   channels.forEach(ch => {
     logDebug(`[SlackFetch] Fetching messages for channel`, {id: ch.id, name: ch.name});
-    try {
-      const resp = UrlFetchApp.fetch('https://slack.com/api/conversations.history', {
-        method: 'post',
-        headers: { Authorization: 'Bearer ' + token },
-        payload: { channel: ch.id, oldest: since },
-        muteHttpExceptions: true
-      });
-      const data = JSON.parse(resp.getContentText());
-      logDebug(`[SlackFetch] API response for channel ${ch.name || ch.id}:`, data);
-      if (data.ok && data.messages) {
-        logDebug(`[SlackFetch] ${data.messages.length} messages found in ${ch.name || ch.id}`);
-        data.messages.forEach(m => {
-          all.push({
-            channel: ch.name || ch.id,
-            user: m.user,
-            text: m.text,
-            ts: m.ts
-          });
+    let cursor = '';
+    let page = 1;
+    do {
+      try {
+        const payload = { channel: ch.id, oldest: since, limit: 1000 };
+        if (cursor) payload.cursor = cursor;
+        const resp = UrlFetchApp.fetch('https://slack.com/api/conversations.history', {
+          method: 'post',
+          headers: { Authorization: 'Bearer ' + token },
+          payload: payload,
+          muteHttpExceptions: true
         });
-      } else {
-        logDebug(`[SlackFetch] No messages or error for channel ${ch.name || ch.id}:`, data.error || data);
+        const data = JSON.parse(resp.getContentText());
+        logDebug(`[SlackFetch] API response (page ${page}) for channel ${ch.name || ch.id}:`, {
+          ok: data.ok,
+          messages: data.messages ? data.messages.length : 0,
+          has_more: data.has_more,
+          error: data.error
+        });
+        if (data.ok && data.messages) {
+          data.messages.forEach(m => {
+            all.push({
+              channel: ch.name || ch.id,
+              user: m.user,
+              text: m.text,
+              ts: m.ts
+            });
+          });
+        } else {
+          logDebug(`[SlackFetch] No messages or error for channel ${ch.name || ch.id} (page ${page}):`, data.error || data);
+          break;
+        }
+        cursor = data.response_metadata && data.response_metadata.next_cursor ? data.response_metadata.next_cursor : '';
+        page++;
+      } catch (e) {
+        logDebug(`[SlackFetch] Exception fetching history for ${ch.name || ch.id} (page ${page}):`, e);
+        break;
       }
-    } catch (e) {
-      logDebug(`[SlackFetch] Exception fetching history for ${ch.name || ch.id}:`, e);
-    }
+    } while (cursor);
   });
   logDebug(`[SlackFetch] Total messages fetched: ${all.length}`);
   return all;
