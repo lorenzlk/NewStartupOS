@@ -244,30 +244,18 @@ function extractChunksFromDoc(doc) {
 }
 
 
-/**
- * Builds an optimized prompt for OpenAI to summarize document changes,
- * emphasizing key decisions and actionable items.
- *
- * @param {string} content The new content of the document chunk.
- * @param {string} context The related context retrieved from Pinecone (formatted string of titles).
- * @return {string} The formatted prompt string.
- */
 function buildSummarizationPrompt(content, context) {
   const contextString = context || 'None provided.';
-  // Optimized Prompt: Emphasize key decisions, owner/deadline for actions.
   return `
-You are assisting an early-stage startup team by summarizing document updates for a nightly review.
-Focus ONLY on the "New Content" provided below. Use the "Relevant Context" section (titles of related sections) ONLY for background understanding. Do NOT summarize the context itself.
-
-Your task:
-1. Read the "New Content".
-2. Write a brief "Summary of Changes" (1-2 sentences) focusing on the most significant updates or key decisions made in the "New Content". If only minor edits (typos, formatting) seem present, state that.
-3. Extract any specific "Action Items" mentioned in the "New Content". If an owner or deadline is mentioned for an action, include it.
+1. Carefully review the "New Content" and compare it to the "Relevant Context" below, which may include historical summaries or related discussions from Pinecone.
+2. If there is documented history or prior context, connect the dots—refer to past decisions, ongoing threads, or unresolved questions, and make the conversation feel like it's building over time.
+3. Summarize the key decisions, changes, or updates found in the "New Content", focusing on what changed and why.
+4. Extract any specific "Action Items" mentioned in the "New Content". If an owner or deadline is mentioned for an action, include it.
 
 Respond in exactly two labeled sections:
 
-Summary of Changes:
-- [Concise summary of key changes/decisions]
+Summary of Changes (with Context):
+- [Concise summary connecting new information to historical context, highlighting ongoing themes or threads]
 
 Action Items:
 - [Action item 1 (Owner: X, Deadline: Y)]
@@ -275,7 +263,7 @@ Action Items:
 - (Use "No action items." if none are explicitly mentioned in the New Content)
 
 ---
-Relevant Context (Titles of related sections):
+Relevant Context (from Pinecone, including prior summaries or discussions):
 ${contextString}
 ---
 New Content:
