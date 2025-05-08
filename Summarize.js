@@ -242,9 +242,6 @@ function extractChunksFromDoc(doc) {
   logDebug('[Doc Extract] Finished extracting document chunks', { count: chunks.length, titles: chunks.map(c=>c.title) });
   return chunks;
 }
-
-
-function buildSummarizationPrompt(content, context) {
   const contextString = context || 'None provided.';
   return `
 1. Carefully review the "New Content" and compare it to the "Relevant Context" below, which may include historical summaries or related discussions from Pinecone.
@@ -271,7 +268,6 @@ ${content}
 ---
 `.trim();
 }
-
 
 /**
  * Parses the raw text response from OpenAI (expected to follow the format
