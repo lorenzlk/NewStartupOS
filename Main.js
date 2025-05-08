@@ -239,15 +239,46 @@ function fetchAllSlackMessagesForToday() {
  * List every public channel in the workspace.
  */
 function listAllPublicChannels(token) {
-  const resp = UrlFetchApp.fetch('https://slack.com/api/conversations.list', {
-    method: 'post',
-    headers: { Authorization: 'Bearer ' + token },
-    payload: {
-      exclude_archived: true,
-      types: 'public_channel',
-      limit: 1000
+  let channels = [];
+  let cursor = '';
+  do {
+    const resp = UrlFetchApp.fetch('https://slack.com/api/conversations.list', {
+      method: 'get',
+      headers: { Authorization: 'Bearer ' + token },
+      payload: {
+        types: 'public_channel',
+        limit: 1000,
+        cursor: cursor
+      },
+      muteHttpExceptions: true
+    });
+    const data = JSON.parse(resp.getContentText());
+    if (data.ok && data.channels) {
+      channels = channels.concat(data.channels);
+      cursor = data.response_metadata && data.response_metadata.next_cursor ? data.response_metadata.next_cursor : '';
+    } else {
+      cursor = '';
+    }
+  } while (cursor);
+
+  // Ensure the bot joins each public channel
+  channels.forEach(ch => {
+    if (!ch.is_member) {
+      try {
+        UrlFetchApp.fetch('https://slack.com/api/conversations.join', {
+          method: 'post',
+          headers: { Authorization: 'Bearer ' + token },
+          payload: { channel: ch.id },
+          muteHttpExceptions: true
+        });
+      } catch (e) {
+        logDebug(`Failed to join channel ${ch.name}:`, e);
+      }
     }
   });
-  const data = JSON.parse(resp.getContentText());
-  return data.ok ? data.channels : [];
+
+  // Filter to only channels the bot is a member of
+  const memberChannels = channels.filter(ch => ch.is_member);
+  logDebug('Channels bot is a member of:', memberChannels.map(ch => ch.name || ch.id));
+  return memberChannels;
 }
