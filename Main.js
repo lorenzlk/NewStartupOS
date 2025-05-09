@@ -410,8 +410,9 @@ function fetchAllSlackMessagesForToday() {
         headers: { Authorization: 'Bearer ' + token }
       });
       const data = JSON.parse(resp.getContentText());
-      Logger.log('Response for channel', ch.name, resp.getContentText());
+      Logger.log(`Response for channel ${ch.name}: ${resp.getContentText()}`);
       if (data.ok && data.messages) {
+        Logger.log(`Channel ${ch.name} - messages found: ${data.messages.length}`);
         data.messages.forEach(m => {
           all.push({
             channel: ch.name || ch.id,
@@ -420,6 +421,8 @@ function fetchAllSlackMessagesForToday() {
             ts: m.ts
           });
         });
+      } else {
+        Logger.log(`No messages or error in channel ${ch.name}: ${JSON.stringify(data)}`);
       }
     } catch (e) {
       Logger.log(`Failed to fetch history for ${ch.name}: ${e}`);
