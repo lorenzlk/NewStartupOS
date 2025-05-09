@@ -1,4 +1,8 @@
+// ===== DEBUG: Only one definition should exist below =====
 function getEmailSummaryForLast24Hours() {
+  Logger.log('getEmailSummaryForLast24Hours: Function started');
+  return 'Function reached this point'; // TEMP: For debugging
+
   const scriptProperties = PropertiesService.getScriptProperties();
   const OPENAI_API_KEY = scriptProperties.getProperty('OPENAI_API_KEY');
   if (!OPENAI_API_KEY) return 'No OpenAI API key found.';
@@ -65,7 +69,11 @@ Respond in JSON exactly as:
   } catch (e) {
     return `Error summarizing emails: ${e.message}`;
   }
-}function getEmailSummaryForLast24Hours() {
+}// ===== DEBUG: Only one definition should exist below =====
+function getEmailSummaryForLast24Hours() {
+  Logger.log('getEmailSummaryForLast24Hours: Function started');
+  return 'Function reached this point'; // TEMP: For debugging
+
   const scriptProperties = PropertiesService.getScriptProperties();
   const OPENAI_API_KEY = scriptProperties.getProperty('OPENAI_API_KEY');
   if (!OPENAI_API_KEY) return 'No OpenAI API key found.';
@@ -166,7 +174,11 @@ Respond in JSON exactly as:
     subject: '🌙 Nightly Review',
     htmlBody: body
   });
-}function getEmailSummaryForLast24Hours() {
+}// ===== DEBUG: Only one definition should exist below =====
+function getEmailSummaryForLast24Hours() {
+  Logger.log('getEmailSummaryForLast24Hours: Function started');
+  return 'Function reached this point'; // TEMP: For debugging
+
   Logger.log('getEmailSummaryForLast24Hours: START');
   const scriptProperties = PropertiesService.getScriptProperties();
   const OPENAI_API_KEY = scriptProperties.getProperty('OPENAI_API_KEY');
@@ -240,7 +252,11 @@ Logger.log('Email summary result:', emailSummary);if (!emailSummary || emailSumm
     return `Error summarizing emails: ${e.message}`;
   }
 }
+// ===== DEBUG: Only one definition should exist below =====
 function getEmailSummaryForLast24Hours() {
+  Logger.log('getEmailSummaryForLast24Hours: Function started');
+  return 'Function reached this point'; // TEMP: For debugging
+
   // ...same function code again...
 }function sendSummaryDigestToEmail(docSummaries, slackDigest) {
   Logger.log('sendSummaryDigestToEmail: START');
