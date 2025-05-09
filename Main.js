@@ -163,6 +163,11 @@ Respond in JSON exactly as:
     subject: '🌙 Nightly Review',
     htmlBody: body
   });
+}function getEmailSummaryForLast24Hours() {
+  // ...function code...
+}
+function getEmailSummaryForLast24Hours() {
+  // ...same function code again...
 }// === main.gs ===
 
 /**
