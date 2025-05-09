@@ -427,6 +427,8 @@ function fetchAllSlackMessagesForToday() {
   });
   Logger.log('All messages collected:', JSON.stringify(all));
   return all;
+}
+
 function listAllPublicChannels(token) {
   const url = 'https://slack.com/api/conversations.list?exclude_archived=true&types=public_channel';
   const resp = UrlFetchApp.fetch(url, {
