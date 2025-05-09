@@ -167,11 +167,77 @@ Respond in JSON exactly as:
     htmlBody: body
   });
 }function getEmailSummaryForLast24Hours() {
-  // ...function code...
+  Logger.log('getEmailSummaryForLast24Hours: START');
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const OPENAI_API_KEY = scriptProperties.getProperty('OPENAI_API_KEY');
+  if (!OPENAI_API_KEY) {
+    Logger.log('getEmailSummaryForLast24Hours: No OpenAI API key found.');
+    return 'No OpenAI API key found.';
+  }
+
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  Logger.log('getEmailSummaryForLast24Hours: Fetching threads after', yesterday);
+  const threads = GmailApp.search(`after:${Utilities.formatDate(yesterday, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm')}`);
+  let emailContents = [];
+  threads.forEach(thread => {
+    thread.getMessages().forEach(msg => {
+      emailContents.push({
+        subject: msg.getSubject(),
+        snippet: msg.getPlainBody().slice(0, 200)
+      });
+    });
+  });
+  Logger.log('getEmailSummaryForLast24Hours: Collected email contents:', emailContents);
+  if (emailContents.length === 0) {
+    Logger.log('getEmailSummaryForLast24Hours: No emails found in last 24 hours.');
+    return 'No emails found in the last 24 hours.';
+  }
+
+  // Prepare prompt for OpenAI
+  const prompt = `Summarize the following emails from the last 24 hours. Provide a summary and any action items as JSON {"summary": ..., "actions": ...}:
+${emailContents.map(e => `Subject: ${e.subject}\nSnippet: ${e.snippet}`).join('\n\n')}`;
+  Logger.log('getEmailSummaryForLast24Hours: Sending prompt to OpenAI:', prompt);
+
+  try {
+    const response = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'Authorization': 'Bearer ' + OPENAI_API_KEY },
+      payload: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 500
+      })
+    });
+
+    const aiResp = JSON.parse(response.getContentText());
+    let aiContent = '';
+    if (aiResp.choices && aiResp.choices[0] && aiResp.choices[0].message) {
+      aiContent = aiResp.choices[0].message.content;
+    } else if (aiResp.content) {
+      aiContent = aiResp.content;
+    }
+
+    Logger.log('getEmailSummaryForLast24Hours: OpenAI response:', aiContent);
+
+    try {
+      const parsed = JSON.parse(aiContent);
+      Logger.log('getEmailSummaryForLast24Hours: Parsed summary:', parsed);
+      return `<b>Summary:</b> ${parsed.summary}<br><b>Actions:</b> ${parsed.actions}`;
+    } catch (e) {
+      Logger.log('getEmailSummaryForLast24Hours: Failed to parse OpenAI output as JSON:', e);
+      return aiContent;
+    }
+  } catch (e) {
+    Logger.log('getEmailSummaryForLast24Hours: Error during OpenAI call:', e);
+    return `Error summarizing emails: ${e.message}`;
+  }
 }
 function getEmailSummaryForLast24Hours() {
   // ...same function code again...
 }function sendSummaryDigestToEmail(docSummaries, slackDigest) {
+  Logger.log('sendSummaryDigestToEmail: START');
   const recipient = Session.getEffectiveUser().getEmail();
   let body = '';
 
@@ -179,7 +245,7 @@ function getEmailSummaryForLast24Hours() {
 
   // --- Add Email Activity Summary ---
   const emailSummary = getEmailSummaryForLast24Hours();
-  Logger.log('Email summary:', emailSummary); // <-- Add this line
+  Logger.log('sendSummaryDigestToEmail: Email summary:', emailSummary);
   if (emailSummary) {
     body += '<br><br>📬 <b>Email Activity Summary (Past 24 Hours)</b><br>';
     body += emailSummary + '<br>';
