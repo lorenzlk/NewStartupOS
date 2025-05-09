@@ -168,6 +168,25 @@ Respond in JSON exactly as:
 }
 function getEmailSummaryForLast24Hours() {
   // ...same function code again...
+}function sendSummaryDigestToEmail(docSummaries, slackDigest) {
+  const recipient = Session.getEffectiveUser().getEmail();
+  let body = '';
+
+  // ...existing code...
+
+  // --- Add Email Activity Summary ---
+  const emailSummary = getEmailSummaryForLast24Hours();
+  Logger.log('Email summary:', emailSummary); // <-- Add this line
+  if (emailSummary) {
+    body += '<br><br>📬 <b>Email Activity Summary (Past 24 Hours)</b><br>';
+    body += emailSummary + '<br>';
+  }
+
+  MailApp.sendEmail({
+    to: recipient,
+    subject: '🌙 Nightly Review',
+    htmlBody: body
+  });
 }// === main.gs ===
 
 /**
@@ -371,23 +390,27 @@ function getRegisteredDocs() {
   return prop.split(',').filter(id => id);
 }
 
-/**
- * Fetch all messages from every public channel in the last 24h.
- */
 function fetchAllSlackMessagesForToday() {
-  const token = cfg.SLACK.BOT_TOKEN;
+  const token = PropertiesService.getScriptProperties().getProperty('SLACK_BOT_TOKEN');
+  if (!token) {
+    Logger.log('SLACK_BOT_TOKEN not set in Script Properties!');
+    return [];
+  }
   const since = (Date.now() / 1000) - 24 * 3600;
   const channels = listAllPublicChannels(token);
+
+  Logger.log('Channels found:', JSON.stringify(channels));
 
   const all = [];
   channels.forEach(ch => {
     try {
-      const resp = UrlFetchApp.fetch('https://slack.com/api/conversations.history', {
-        method: 'post',
-        headers: { Authorization: 'Bearer ' + token },
-        payload: { channel: ch.id, oldest: since }
+      const url = `https://slack.com/api/conversations.history?channel=${ch.id}&oldest=${since}`;
+      const resp = UrlFetchApp.fetch(url, {
+        method: 'get',
+        headers: { Authorization: 'Bearer ' + token }
       });
       const data = JSON.parse(resp.getContentText());
+      Logger.log('Response for channel', ch.name, resp.getContentText());
       if (data.ok && data.messages) {
         data.messages.forEach(m => {
           all.push({
@@ -399,9 +422,10 @@ function fetchAllSlackMessagesForToday() {
         });
       }
     } catch (e) {
-      logDebug(`Failed to fetch history for ${ch.name}`, e);
+      Logger.log(`Failed to fetch history for ${ch.name}: ${e}`);
     }
   });
+  Logger.log('All messages collected:', JSON.stringify(all));
   return all;
 }
 
