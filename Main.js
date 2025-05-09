@@ -1,4 +1,169 @@
-// === main.gs ===
+function getEmailSummaryForLast24Hours() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const OPENAI_API_KEY = scriptProperties.getProperty('OPENAI_API_KEY');
+  if (!OPENAI_API_KEY) return 'No OpenAI API key found.';
+
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const threads = GmailApp.search(`after:${Utilities.formatDate(yesterday, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm')}`);
+  let emailContents = [];
+  threads.forEach(thread => {
+    thread.getMessages().forEach(msg => {
+      emailContents.push({
+        subject: msg.getSubject(),
+        from: msg.getFrom(),
+        date: msg.getDate(),
+        body: msg.getPlainBody().substring(0, 1000)
+      });
+    });
+  });
+
+  if (emailContents.length === 0) {
+    return 'No emails found in the past 24 hours.';
+  }
+
+  const prompt = `
+You are an assistant that summarizes email activity and extracts action items.
+Emails:
+${JSON.stringify(emailContents, null, 2)}
+
+Respond in JSON exactly as:
+{
+  "summary": "...",
+  "actions": "..."
+}
+`.trim();
+
+  try {
+    const response = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      },
+      payload: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [{role: 'user', content: prompt}],
+        max_tokens: 500
+      })
+    });
+
+    const aiResp = JSON.parse(response.getContentText());
+    let aiContent = '';
+    if (aiResp.choices && aiResp.choices[0] && aiResp.choices[0].message) {
+      aiContent = aiResp.choices[0].message.content;
+    } else if (aiResp.content) {
+      aiContent = aiResp.content;
+    }
+
+    try {
+      const parsed = JSON.parse(aiContent);
+      return `<b>Summary:</b> ${parsed.summary}<br><b>Actions:</b> ${parsed.actions}`;
+    } catch (e) {
+      return aiContent;
+    }
+  } catch (e) {
+    return `Error summarizing emails: ${e.message}`;
+  }
+}function getEmailSummaryForLast24Hours() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const OPENAI_API_KEY = scriptProperties.getProperty('OPENAI_API_KEY');
+  if (!OPENAI_API_KEY) return 'No OpenAI API key found.';
+
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const threads = GmailApp.search(`after:${Utilities.formatDate(yesterday, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm')}`);
+  let emailContents = [];
+  threads.forEach(thread => {
+    thread.getMessages().forEach(msg => {
+      emailContents.push({
+        subject: msg.getSubject(),
+        from: msg.getFrom(),
+        date: msg.getDate(),
+        body: msg.getPlainBody().substring(0, 1000)
+      });
+    });
+  });
+
+  if (emailContents.length === 0) {
+    return 'No emails found in the past 24 hours.';
+  }
+
+  const prompt = `
+You are an assistant that summarizes email activity and extracts action items.
+Emails:
+${JSON.stringify(emailContents, null, 2)}
+
+Respond in JSON exactly as:
+{
+  "summary": "...",
+  "actions": "..."
+}
+`.trim();
+
+  try {
+    const response = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      },
+      payload: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [{role: 'user', content: prompt}],
+        max_tokens: 500
+      })
+    });
+
+    const aiResp = JSON.parse(response.getContentText());
+    let aiContent = '';
+    if (aiResp.choices && aiResp.choices[0] && aiResp.choices[0].message) {
+      aiContent = aiResp.choices[0].message.content;
+    } else if (aiResp.content) {
+      aiContent = aiResp.content;
+    }
+
+    try {
+      const parsed = JSON.parse(aiContent);
+      return `<b>Summary:</b> ${parsed.summary}<br><b>Actions:</b> ${parsed.actions}`;
+    } catch (e) {
+      return aiContent;
+    }
+  } catch (e) {
+    return `Error summarizing emails: ${e.message}`;
+  }
+}function sendSummaryDigestToEmail(docSummaries, slackDigest) {
+  const recipient = Session.getEffectiveUser().getEmail();
+  let body = '';
+
+  if (docSummaries.length) {
+    body += '📄 <b>Document Changes</b><br><br>';
+    docSummaries.forEach(s => {
+      body += `<b>${s.title}</b><br>${s.summary}<br>Action Items: ${s.actions || 'None'}<br><br>`;
+    });
+  } else {
+    body += '📄 No document changes detected.<br><br>';
+  }
+
+  body += '💬 <b>Slack Summary</b><br>';
+  body += slackDigest.summary + '<br>';
+  if (slackDigest.actions) {
+    body += `<br>Action Items:<br>${slackDigest.actions}<br>`;
+  }
+
+  // --- Add Email Activity Summary ---
+  const emailSummary = getEmailSummaryForLast24Hours();
+  if (emailSummary) {
+    body += '<br><br>📬 <b>Email Activity Summary (Past 24 Hours)</b><br>';
+    body += emailSummary + '<br>';
+  }
+
+  MailApp.sendEmail({
+    to: recipient,
+    subject: '🌙 Nightly Review',
+    htmlBody: body
+  });
+}// === main.gs ===
 
 /**
  * Entry point for your nightly review.
@@ -206,82 +371,32 @@ function getRegisteredDocs() {
  */
 function fetchAllSlackMessagesForToday() {
   const token = cfg.SLACK.BOT_TOKEN;
-  // Log current local and UTC time
-  const nowLocal = new Date();
-  const nowUTC = new Date(nowLocal.getTime() + nowLocal.getTimezoneOffset() * 60000);
-  const sinceEpoch = Math.floor(Date.now() / 1000) - 24 * 3600;
-  const since = sinceEpoch.toString();
-  logDebug('[SlackFetch] Starting fetchAllSlackMessagesForToday.', {
-    localTime: nowLocal.toString(),
-    utcTime: nowUTC.toUTCString(),
-    sinceEpoch,
-    since
-  });
+  const since = (Date.now() / 1000) - 24 * 3600;
   const channels = listAllPublicChannels(token);
-  logDebug('[SlackFetch] Channels to process:', channels.map(ch => ({id: ch.id, name: ch.name})));
+
   const all = [];
   channels.forEach(ch => {
-    logDebug(`[SlackFetch] Fetching messages for channel`, {id: ch.id, name: ch.name});
-    let cursor = '';
-    let page = 1;
-    let channelMessages = [];
-    do {
-      try {
-        const payload = { channel: ch.id, oldest: since, limit: 1000 };
-        if (cursor) payload.cursor = cursor;
-        const resp = UrlFetchApp.fetch('https://slack.com/api/conversations.history', {
-          method: 'post',
-          headers: { Authorization: 'Bearer ' + token },
-          payload: payload,
-          muteHttpExceptions: true
-        });
-        const data = JSON.parse(resp.getContentText());
-        // Only log summary info
-        logDebug(`[SlackFetch] (page ${page}) channel ${ch.name || ch.id}: ok=${data.ok}, messages=${data.messages ? data.messages.length : 0}, has_more=${data.has_more}, error=${data.error}`);
-        if (data.ok && data.messages) {
-          data.messages.forEach(m => {
-            all.push({
-              channel: ch.name || ch.id,
-              user: m.user,
-              text: m.text,
-              ts: m.ts
-            });
-            channelMessages.push(m);
-          });
-        } else {
-          logDebug(`[SlackFetch] No messages or error for channel ${ch.name || ch.id} (page ${page}):`, data.error || data);
-          break;
-        }
-        cursor = data.response_metadata && data.response_metadata.next_cursor ? data.response_metadata.next_cursor : '';
-        page++;
-      } catch (e) {
-        logDebug(`[SlackFetch] Exception fetching history for ${ch.name || ch.id} (page ${page}):`, e);
-        break;
-      }
-    } while (cursor);
-    // After fetching all pages for this channel, log summary
-    if (channelMessages.length > 0) {
-      // Sort by ts ascending
-      channelMessages.sort(function(a, b) { return parseFloat(a.ts) - parseFloat(b.ts); });
-      var firstMsg = channelMessages[0];
-      var lastMsg = channelMessages[channelMessages.length - 1];
-      logDebug(`[SlackFetch] Channel ${ch.name || ch.id}: ${channelMessages.length} messages. First ts: ${firstMsg.ts} (${new Date(parseFloat(firstMsg.ts) * 1000).toLocaleString()}), Last ts: ${lastMsg.ts} (${new Date(parseFloat(lastMsg.ts) * 1000).toLocaleString()})`);
-      // Log a sample message
-      logDebug(`[SlackFetch] Sample message from ${ch.name || ch.id}:`, {
-        ts: firstMsg.ts,
-        user: firstMsg.user,
-        text: firstMsg.text
+    try {
+      const resp = UrlFetchApp.fetch('https://slack.com/api/conversations.history', {
+        method: 'post',
+        headers: { Authorization: 'Bearer ' + token },
+        payload: { channel: ch.id, oldest: since }
       });
-      // Warn if any message is older than 'since'
-      var sinceNum = parseFloat(since);
-      var oldMsgs = channelMessages.filter(m => parseFloat(m.ts) < sinceNum);
-      if (oldMsgs.length > 0) {
-        logDebug(`[SlackFetch][WARNING] ${oldMsgs.length} messages older than 'since' in channel ${ch.name || ch.id}. Example old ts: ${oldMsgs[0].ts}`);
+      const data = JSON.parse(resp.getContentText());
+      if (data.ok && data.messages) {
+        data.messages.forEach(m => {
+          all.push({
+            channel: ch.name || ch.id,
+            user: m.user,
+            text: m.text,
+            ts: m.ts
+          });
+        });
       }
+    } catch (e) {
+      logDebug(`Failed to fetch history for ${ch.name}`, e);
     }
-
   });
-  logDebug(`[SlackFetch] Total messages fetched: ${all.length}`);
   return all;
 }
 
@@ -289,46 +404,15 @@ function fetchAllSlackMessagesForToday() {
  * List every public channel in the workspace.
  */
 function listAllPublicChannels(token) {
-  let channels = [];
-  let cursor = '';
-  do {
-    const resp = UrlFetchApp.fetch('https://slack.com/api/conversations.list', {
-      method: 'get',
-      headers: { Authorization: 'Bearer ' + token },
-      payload: {
-        types: 'public_channel',
-        limit: 1000,
-        cursor: cursor
-      },
-      muteHttpExceptions: true
-    });
-    const data = JSON.parse(resp.getContentText());
-    if (data.ok && data.channels) {
-      channels = channels.concat(data.channels);
-      cursor = data.response_metadata && data.response_metadata.next_cursor ? data.response_metadata.next_cursor : '';
-    } else {
-      cursor = '';
-    }
-  } while (cursor);
-
-  // Ensure the bot joins each public channel
-  channels.forEach(ch => {
-    if (!ch.is_member) {
-      try {
-        UrlFetchApp.fetch('https://slack.com/api/conversations.join', {
-          method: 'post',
-          headers: { Authorization: 'Bearer ' + token },
-          payload: { channel: ch.id },
-          muteHttpExceptions: true
-        });
-      } catch (e) {
-        logDebug(`Failed to join channel ${ch.name}:`, e);
-      }
+  const resp = UrlFetchApp.fetch('https://slack.com/api/conversations.list', {
+    method: 'post',
+    headers: { Authorization: 'Bearer ' + token },
+    payload: {
+      exclude_archived: true,
+      types: 'public_channel',
+      limit: 1000
     }
   });
-
-  // Filter to only channels the bot is a member of
-  const memberChannels = channels.filter(ch => ch.is_member);
-  logDebug('Channels bot is a member of:', memberChannels.map(ch => ch.name || ch.id));
-  return memberChannels;
+  const data = JSON.parse(resp.getContentText());
+  return data.ok ? data.channels : [];
 }
