@@ -198,7 +198,13 @@ Respond in JSON exactly as:
   const prompt = `Summarize the following emails from the last 24 hours. Provide a summary and any action items as JSON {"summary": ..., "actions": ...}:
 ${emailContents.map(e => `Subject: ${e.subject}\nSnippet: ${e.snippet}`).join('\n\n')}`;
   Logger.log('getEmailSummaryForLast24Hours: Sending prompt to OpenAI:', prompt);
-
+Logger.log('Calling getEmailSummaryForLast24Hours...');
+const emailSummary = getEmailSummaryForLast24Hours();
+Logger.log('Email summary result:', emailSummary);if (!emailSummary || emailSummary.trim() === '' || /^No emails found/.test(emailSummary)) {
+  body += '<br><br>📬 <b>Email Activity Summary (Past 24 Hours)</b><br>No emails found or error summarizing emails.<br>';
+} else {
+  body += '<br><br>📬 <b>Email Activity Summary (Past 24 Hours)</b><br>' + emailSummary + '<br>';
+}
   try {
     const response = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
       method: 'post',
