@@ -427,20 +427,29 @@ function fetchAllSlackMessagesForToday() {
   });
   Logger.log('All messages collected:', JSON.stringify(all));
   return all;
-}
-function listAllPublicChannels(token) {
-  const url = 'https://slack.com/api/conversations.list?exclude_archived=true&types=public_channel';
-  const resp = UrlFetchApp.fetch(url, {
-    method: 'get',
-    headers: { Authorization: 'Bearer ' + token }
-  });
-  Logger.log('Raw conversations.list response:', resp.getContentText());
-  const data = JSON.parse(resp.getContentText());
-  if (data.ok && data.channels) {
-    return data.channels;
-  } else {
-    // Log the entire data object for debugging
-    Logger.log('Failed to list channels, full response:', JSON.stringify(data));
-    return [];
+  function listAllPublicChannels(token) {
+    const url = 'https://slack.com/api/conversations.list?exclude_archived=true&types=public_channel';
+    const resp = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    var rawText = resp.getContentText();
+    Logger.log('===RAW RESPONSE START===');
+    Logger.log(rawText);
+    Logger.log('===RAW RESPONSE END===');
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      Logger.log('JSON parse error:', e);
+      return [];
+    }
+    if (data.ok && data.channels) {
+      return data.channels;
+    } else {
+      Logger.log('===FAILED RESPONSE START===');
+      Logger.log(JSON.stringify(data));
+      Logger.log('===FAILED RESPONSE END===');
+      return [];
+    }
   }
-}
