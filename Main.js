@@ -153,9 +153,12 @@ Respond in JSON exactly as:
 
   // --- Add Email Activity Summary ---
   const emailSummary = getEmailSummaryForLast24Hours();
-  if (emailSummary) {
+  Logger.log('Email summary:', emailSummary);
+  if (emailSummary && typeof emailSummary === 'string' && emailSummary.trim() && !/^No emails found/.test(emailSummary)) {
     body += '<br><br>📬 <b>Email Activity Summary (Past 24 Hours)</b><br>';
     body += emailSummary + '<br>';
+  } else {
+    body += '<br><br>📬 <b>Email Activity Summary (Past 24 Hours)</b><br>No emails found or error summarizing emails.<br>';
   }
 
   MailApp.sendEmail({
