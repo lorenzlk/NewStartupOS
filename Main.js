@@ -429,19 +429,18 @@ function fetchAllSlackMessagesForToday() {
   return all;
 }
 
-/**
- * List every public channel in the workspace.
- */
 function listAllPublicChannels(token) {
-  const resp = UrlFetchApp.fetch('https://slack.com/api/conversations.list', {
-    method: 'post',
-    headers: { Authorization: 'Bearer ' + token },
-    payload: {
-      exclude_archived: true,
-      types: 'public_channel',
-      limit: 1000
-    }
+  const url = 'https://slack.com/api/conversations.list?exclude_archived=true&types=public_channel';
+  const resp = UrlFetchApp.fetch(url, {
+    method: 'get',
+    headers: { Authorization: 'Bearer ' + token }
   });
+  Logger.log('Raw conversations.list response:', resp.getContentText());
   const data = JSON.parse(resp.getContentText());
-  return data.ok ? data.channels : [];
+  if (data.ok && data.channels) {
+    return data.channels;
+  } else {
+    Logger.log('Failed to list channels:', data.error);
+    return [];
+  }
 }
