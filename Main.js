@@ -428,7 +428,6 @@ function fetchAllSlackMessagesForToday() {
   Logger.log('All messages collected:', JSON.stringify(all));
   return all;
 }
-
 function listAllPublicChannels(token) {
   const url = 'https://slack.com/api/conversations.list?exclude_archived=true&types=public_channel';
   const resp = UrlFetchApp.fetch(url, {
@@ -440,7 +439,8 @@ function listAllPublicChannels(token) {
   if (data.ok && data.channels) {
     return data.channels;
   } else {
-    Logger.log('Failed to list channels:', data.error);
+    // Log the entire data object for debugging
+    Logger.log('Failed to list channels, full response:', JSON.stringify(data));
     return [];
   }
 }
