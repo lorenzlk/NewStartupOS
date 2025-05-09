@@ -9,8 +9,14 @@ function getEmailSummaryForLast24Hours() {
   }
 
   const now = new Date();
+  Logger.log('getEmailSummaryForLast24Hours: now (ISO):', now.toISOString());
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const threads = GmailApp.search(`after:${Utilities.formatDate(yesterday, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm')}`);
+  Logger.log('getEmailSummaryForLast24Hours: yesterday (ISO):', yesterday.toISOString());
+  const formattedYesterday = Utilities.formatDate(yesterday, Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm');
+  Logger.log('getEmailSummaryForLast24Hours: formattedYesterday for Gmail search:', formattedYesterday);
+  const searchQuery = `after:${formattedYesterday}`;
+  Logger.log('getEmailSummaryForLast24Hours: Gmail search query:', searchQuery);
+  const threads = GmailApp.search(searchQuery);
   let emailContents = [];
   threads.forEach(thread => {
     thread.getMessages().forEach(msg => {
