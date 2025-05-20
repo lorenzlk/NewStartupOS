@@ -251,6 +251,31 @@ function extractChunksFromDoc(doc) {
  * TEST FUNCTION: Simulates a document structure and logs the output of extractChunksFromDoc.
  * Run this in the Apps Script editor to verify extraction logic.
  */
+function summarizeAllSectionsInDoc(docId) {
+  logDebug(`[Doc Sum] Starting full-section summarization for doc ${docId}`);
+  let doc;
+  try {
+    doc = DocumentApp.openById(docId);
+  } catch (e) {
+    logDebug(`[Doc Sum] ERROR: Failed to open doc ${docId}: ${e.message}`);
+    return;
+  }
+  const chunks = extractChunksFromDoc(doc);
+  chunks.forEach(day => {
+    day.sections.forEach(section => {
+      // Call the summarizer (replace with your real summarizer)
+      const summary = summarizeSection(day.h1, section.h2, section.content);
+      logDebug(`[SUMMARY] Date: ${day.h1} | Section: ${section.h2}\nSummary: ${summary}`);
+    });
+  });
+}
+
+// Placeholder summarizer function. Replace with your real summarization logic.
+function summarizeSection(h1, h2, content) {
+  // For now, just return the first 100 chars as a 'summary'
+  return content.slice(0, 100) + (content.length > 100 ? '...' : '');
+}
+
 function testExtractChunksFromDoc() {
   // Mock Paragraph class
   function MockParagraph(text, heading, type) {
