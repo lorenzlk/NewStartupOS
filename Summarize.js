@@ -169,79 +169,139 @@ function extractChunksFromDoc(doc) {
   const paras = doc.getBody().getParagraphs();
   const chunks = [];
   let currentH1 = null;
-  let currentText = '';
+  let currentH1Obj = null;
+  let currentH2 = null;
+  let currentSection = null;
 
   logDebug(`[Doc Extract] Extracting chunks from document: ${doc.getName()}`);
 
   paras.forEach((p, index) => {
     let txt = '';
-    let isListItem = false; // Flag to check if it's a list item
-
+    let isListItem = false;
     try {
-       const elementType = p.getType();
-
-       if (elementType === DocumentApp.ElementType.PARAGRAPH) {
-           txt = p.asText().getText().trim();
-       } else if (elementType === DocumentApp.ElementType.LIST_ITEM) {
-           isListItem = true;
-           // Corrected Check for getGlyphType
-           const glyph = (typeof p.getGlyphType === 'function' && p.getGlyphType()) ? '* ' : '- ';
-           txt = glyph + p.asText().getText().trim();
-       }
-       // Add handling for other types like TABLE if needed
-    } catch (e) {
-       logDebug(`[Doc Extract] Warning: Could not get text from element ${index + 1}`, { error: e.message, type: p.getType() });
-       return; // Skip element if text cannot be read
-    }
-
-    // Skip paragraphs that are truly empty after trimming
-    if (!txt) {
-         return;
-    }
-
-    const style = p.getHeading();
-
-    if (style === DocumentApp.ParagraphHeading.HEADING1) {
-      // Save previous chunk if one exists
-      if (currentH1 && currentText.trim()) {
-        chunks.push({ title: currentH1, content: currentText.trim() });
-        logDebug(`[Doc Extract] Completed chunk: ${currentH1}`);
+      const elementType = p.getType();
+      if (elementType === DocumentApp.ElementType.PARAGRAPH) {
+        txt = p.asText().getText().trim();
+      } else if (elementType === DocumentApp.ElementType.LIST_ITEM) {
+        isListItem = true;
+        const glyph = (typeof p.getGlyphType === 'function' && p.getGlyphType()) ? '* ' : '- ';
+        txt = glyph + p.asText().getText().trim();
       }
-      // Start new chunk
+    } catch (e) {
+      logDebug(`[Doc Extract] Warning: Could not get text from element ${index + 1}`, { error: e.message, type: p.getType() });
+      return;
+    }
+    if (!txt) {
+      return;
+    }
+    const style = p.getHeading();
+    if (style === DocumentApp.ParagraphHeading.HEADING1) {
+      // Save previous H1 chunk
+      if (currentH1Obj) {
+        // Save last section if exists
+        if (currentSection) {
+          currentH1Obj.sections.push(currentSection);
+        }
+        chunks.push(currentH1Obj);
+        logDebug(`[Doc Extract] Completed chunk: ${currentH1Obj.h1}`);
+      }
+      // Start new H1 chunk
       currentH1 = txt;
-      currentText = ''; // Reset text for the new H1 section
+      currentH1Obj = { h1: currentH1, sections: [] };
+      currentH2 = null;
+      currentSection = null;
       logDebug(`[Doc Extract] Started new chunk: ${currentH1}`);
-    }
-    else if (style === DocumentApp.ParagraphHeading.HEADING2) {
-       // Add H2s with markdown-like prefix if H1 section has started
-       if (currentH1) {
-           currentText += `## ${txt}\n\n`; // Add extra newline for spacing
-       } else {
-           logDebug(`[Doc Extract] Skipping H2 found before first H1: ${txt}`);
-       }
-    }
-    else {
-      // Add regular paragraph text or list item if H1 section has started
-      if (currentH1) {
-         // Add text, ensuring a newline separates it from previous content
-         currentText += txt + '\n\n'; // Add extra newline for spacing
+    } else if (style === DocumentApp.ParagraphHeading.HEADING2) {
+      if (currentH1Obj) {
+        // Save previous section if exists
+        if (currentSection) {
+          currentH1Obj.sections.push(currentSection);
+        }
+        currentH2 = txt;
+        currentSection = { h2: currentH2, content: '' };
       } else {
-          logDebug(`[Doc Extract] Skipping text found before first H1: "${txt.slice(0,50)}..."`);
+        logDebug(`[Doc Extract] Skipping H2 found before first H1: ${txt}`);
+      }
+    } else {
+      // Normal text or list
+      if (currentH1Obj) {
+        if (!currentSection) {
+          // If we have text under H1 with no H2, create an 'Uncategorized' section
+          currentSection = { h2: 'Uncategorized', content: '' };
+        }
+        currentSection.content += txt + '\n\n';
+      } else {
+        logDebug(`[Doc Extract] Skipping text found before first H1: "${txt.slice(0,50)}..."`);
       }
     }
   });
-
-  // Add the last chunk after the loop finishes
-  if (currentH1 && currentText.trim()) {
-    chunks.push({ title: currentH1, content: currentText.trim() });
-    logDebug(`[Doc Extract] Completed final chunk: ${currentH1}`);
-  } else if (currentH1) {
-      logDebug(`[Doc Extract] Warning: Last H1 section '${currentH1}' had no content.`);
+  // Save the last H1 chunk
+  if (currentH1Obj) {
+    if (currentSection) {
+      currentH1Obj.sections.push(currentSection);
+    }
+    chunks.push(currentH1Obj);
+    logDebug(`[Doc Extract] Completed final chunk: ${currentH1Obj.h1}`);
   }
-
-  logDebug('[Doc Extract] Finished extracting document chunks', { count: chunks.length, titles: chunks.map(c=>c.title) });
+  logDebug('[Doc Extract] Finished extracting document chunks', { count: chunks.length, titles: chunks.map(c=>c.h1) });
   return chunks;
 }
+
+/**
+ * TEST FUNCTION: Simulates a document structure and logs the output of extractChunksFromDoc.
+ * Run this in the Apps Script editor to verify extraction logic.
+ */
+function testExtractChunksFromDoc() {
+  // Mock Paragraph class
+  function MockParagraph(text, heading, type) {
+    this.text = text;
+    this.heading = heading;
+    this.type = type || DocumentApp.ElementType.PARAGRAPH;
+    this.asText = function() { return { getText: () => this.text }; };
+    this.getHeading = () => this.heading;
+    this.getType = () => this.type;
+    this.getGlyphType = () => null;
+  }
+
+  // Simulate paragraphs in the doc
+  var mockParas = [
+    new MockParagraph('May 7, 2025', DocumentApp.ParagraphHeading.HEADING1),
+    new MockParagraph('Offline Venture Studio', DocumentApp.ParagraphHeading.HEADING2),
+    new MockParagraph('Email from Elliott Easterling to Mariya at Offline ventures. Potential advisory job.'),
+    new MockParagraph('Mariya,\n\nI chatted with Logan today and he is interested in the Customer Success advisor role that we laid out. Logan is a former Bonboner who really gets the pub tech space. He is advising a company on building a Chief of Staff AI Agent in place for startup founders, so I think that he would be a good fit. He may also be good for other studio projects as he is a media maven.\n\nWho is the right person for him to chat with at the studio next? I have not had any conversations with him on comp as of yet.'),
+    new MockParagraph('Thunder Compute', DocumentApp.ParagraphHeading.HEADING2),
+    new MockParagraph('April 2025 Updates: Hiring and Product (continued)'),
+    new MockParagraph('We have a growing number of returning ‘power users.’ ...'),
+    new MockParagraph('Logan’s response: Thanks for the update as always. Seems like a new baseline has been set! ...'),
+    new MockParagraph('Carl’s response: Thank you Logan :) It has been a journey, it feels great to see some early signs of traction.'),
+    new MockParagraph('May 19, 2025', DocumentApp.ParagraphHeading.HEADING1),
+    new MockParagraph('Mula', DocumentApp.ParagraphHeading.HEADING2),
+    new MockParagraph('Started work on PRD for CS co-pilot. Not sure how much we’ll be able to accomplish in 2 months and the time is probably better spent on identifying the signals for PMF and drilling down on ICP + TTV (time to value).'),
+  ];
+
+  // Mock Document object
+  var mockDoc = {
+    getBody: function() {
+      return {
+        getParagraphs: function() { return mockParas; }
+      };
+    },
+    getName: function() { return 'Mock Test Document'; }
+  };
+
+  var result = extractChunksFromDoc(mockDoc);
+  logDebug('[TEST] extractChunksFromDoc output:', JSON.stringify(result, null, 2));
+  // For Apps Script: Logger.log(JSON.stringify(result, null, 2));
+
+  // --- Example: How to use the nested structure for summarization ---
+  // result.forEach(day => {
+  //   day.sections.forEach(section => {
+  //     // Call your summarization logic here
+  //     // e.g., summarizeSection(section.h2, section.content);
+  //   });
+  // });
+}
+
 
 function buildSummarizationPrompt(content, context) {
   const contextString = context || 'None provided.';
