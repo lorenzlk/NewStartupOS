@@ -1,10 +1,12 @@
 // ===== DEBUG: Only one definition should exist below =====
 function getEmailSummaryForLast24Hours() {
+  Logger.log('=== ENTERED getEmailSummaryForLast24Hours ===');
   Logger.log('getEmailSummaryForLast24Hours: Function started');
   const scriptProperties = PropertiesService.getScriptProperties();
   const OPENAI_API_KEY = scriptProperties.getProperty('OPENAI_API_KEY');
   if (!OPENAI_API_KEY) {
     Logger.log('getEmailSummaryForLast24Hours: No OpenAI API key found.');
+    Logger.log('Returning from getEmailSummaryForLast24Hours:', 'No OpenAI API key found.');
     return 'No OpenAI API key found.';
   }
 
@@ -18,24 +20,44 @@ function getEmailSummaryForLast24Hours() {
   Logger.log('getEmailSummaryForLast24Hours: Gmail search query: ' + searchQuery);
   const threads = GmailApp.search(searchQuery);
   let emailContents = [];
+  // Calculate the 24-hour window using the provided current time (2025-05-09T15:05:51-07:00)
+  const nowFixed = new Date('2025-05-09T15:05:51-07:00');
+  const twentyFourHoursAgo = new Date(nowFixed.getTime() - 24 * 60 * 60 * 1000);
+  Logger.log(`getEmailSummaryForLast24Hours: Filtering emails between ${twentyFourHoursAgo.toISOString()} and ${nowFixed.toISOString()}`);
+
+  let filteredEmailContents = [];
+  let totalEmails = 0;
   threads.forEach(thread => {
     thread.getMessages().forEach(msg => {
-      emailContents.push({
+      totalEmails++;
+      const msgDate = msg.getDate();
+      const emailInfo = {
         subject: msg.getSubject(),
         from: msg.getFrom(),
-        date: msg.getDate(),
-        body: msg.getPlainBody().substring(0, 1000)
-      });
+        date: msgDate,
+        body: msg.getPlainBody().substring(0, 300) // limit body to 300 chars
+      };
+      if (msgDate >= twentyFourHoursAgo && msgDate <= nowFixed) {
+        filteredEmailContents.push(emailInfo);
+        Logger.log(`INCLUDED: [${msgDate.toISOString()}] ${emailInfo.subject}`);
+      } else {
+        Logger.log(`EXCLUDED: [${msgDate.toISOString()}] ${emailInfo.subject}`);
+      }
     });
   });
-  Logger.log(`getEmailSummaryForLast24Hours: Fetched ${emailContents.length} emails.`);
-  if (emailContents.length > 0) {
-    Logger.log(`getEmailSummaryForLast24Hours: First email subject: ${emailContents[0].subject}`);
+  Logger.log(`getEmailSummaryForLast24Hours: Total emails processed: ${totalEmails}`);
+  Logger.log(`getEmailSummaryForLast24Hours: Emails included in last 24 hours: ${filteredEmailContents.length}`);
+  if (filteredEmailContents.length > 0) {
+    Logger.log(`getEmailSummaryForLast24Hours: First included email subject: ${filteredEmailContents[0].subject}`);
   }
-  if (emailContents.length === 0) {
+  if (filteredEmailContents.length === 0) {
     Logger.log('getEmailSummaryForLast24Hours: No emails found in last 24 hours.');
     return 'No emails found in the past 24 hours.';
   }
+
+  // Sort emails by date descending and take the 20 most recent
+  filteredEmailContents.sort((a, b) => b.date - a.date);
+  emailContents = filteredEmailContents.slice(0, 20);
 
   const prompt = `\nYou are an assistant that summarizes email activity and extracts action items.\nEmails:\n${JSON.stringify(emailContents, null, 2)}\n\nRespond in JSON exactly as:\n{\n  "summary": "...",\n  "actions": "..."\n}\n`.trim();
   Logger.log('getEmailSummaryForLast24Hours: Sending prompt to OpenAI:', prompt);
@@ -65,42 +87,86 @@ function getEmailSummaryForLast24Hours() {
     try {
       const parsed = JSON.parse(aiContent);
       Logger.log('getEmailSummaryForLast24Hours: Parsed summary:', parsed);
+      Logger.log('Returning from getEmailSummaryForLast24Hours:', `<b>Summary:</b> ${parsed.summary}<br><b>Actions:</b> ${parsed.actions}`);
       return `<b>Summary:</b> ${parsed.summary}<br><b>Actions:</b> ${parsed.actions}`;
     } catch (e) {
       Logger.log('getEmailSummaryForLast24Hours: Failed to parse OpenAI output as JSON:', e);
+      Logger.log('Returning from getEmailSummaryForLast24Hours:', aiContent);
       return aiContent;
     }
   } catch (e) {
     Logger.log('getEmailSummaryForLast24Hours: Error during OpenAI call:', e);
+    Logger.log('Returning from getEmailSummaryForLast24Hours:', `Error summarizing emails: ${e.message}`);
     return `Error summarizing emails: ${e.message}`;
   }
 }
 
 function sendSummaryDigestToEmail(docSummaries, slackDigest) {
+  Logger.log('=== TOP OF sendSummaryDigestToEmail ===');
   const recipient = Session.getEffectiveUser().getEmail();
-  let body = '';
+  let body = '<div style="font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7;">';
 
-  if (docSummaries.length) {
-    body += '📄 <b>Document Changes</b><br><br>';
+  // --- Document Summaries ---
+  body += '<h2 style="margin-top: 0;">📄 Document Summaries</h2>';
+  if (docSummaries && docSummaries.length > 0) {
     docSummaries.forEach(s => {
-      body += `<b>${s.title}</b><br>${s.summary}<br>Action Items: ${s.actions || 'None'}<br><br>`;
+      body += `<div style="margin-bottom: 18px;"><strong>${s.title}</strong><br>`;
+      body += `<div style="margin-left: 10px;">${s.summary}</div>`;
+      if (s.actions) {
+        // Split actions into lines and bullet them
+        const actionsList = s.actions.split(/\n|\r/).filter(Boolean).map(item => `<li>${item.trim()}</li>`).join('');
+        body += `<br><span style="color: #1a73e8;"><b>Action Items:</b></span><ul style="margin: 6px 0 10px 20px;">${actionsList}</ul>`;
+      }
+      body += '</div>';
     });
   } else {
-    body += '📄 No document changes detected.<br><br>';
+    body += '<div style="color: #888; margin-bottom: 18px;">No document changes detected.</div>';
   }
 
-  body += '💬 <b>Slack Summary</b><br>';
-  body += slackDigest.summary + '<br>';
+  body += '<hr style="border: none; border-top: 1px solid #eee; margin: 32px 0 24px 0;">';
+
+  // --- Slack Summary ---
+  body += '<h2>💬 Slack Summary</h2>';
+  body += `<div style="margin-bottom: 10px;">${slackDigest.summary}</div>`;
   if (slackDigest.actions) {
-    body += `<br>Action Items:<br>${slackDigest.actions}<br>`;
+    const slackActionsList = slackDigest.actions.split(/\n|\r/).filter(Boolean).map(item => `<li>${item.trim()}</li>`).join('');
+    body += `<div style="color: #1a73e8;"><b>Action Items:</b><ul style="margin: 6px 0 10px 20px;">${slackActionsList}</ul></div>`;
   }
 
-  // --- Add Email Activity Summary ---
-  const emailSummary = getEmailSummaryForLast24Hours();
-  Logger.log('Email summary before adding to body:', emailSummary);
-  body += '<br><br>📬 <b>Email Activity Summary (Past 24 Hours)</b><br>';
-  body += (emailSummary || '(empty or undefined)') + '<br>';
+  body += '<hr style="border: none; border-top: 1px solid #eee; margin: 32px 0 24px 0;">';
 
+  // --- Email Summary ---
+  body += '<h2>📬 Email Activity Summary <span style="font-size: 0.8em; color: #888;">(Past 24 Hours)</span></h2>';
+  let emailSummary;
+  try {
+    emailSummary = getEmailSummaryForLast24Hours();
+    // If the result is in the expected <b>Summary:</b> ... <br><b>Actions:</b> ... format, convert actions to a bulleted list
+    if (typeof emailSummary === 'string' && emailSummary.match(/<b>Summary:<\/b>/) && emailSummary.match(/<br><b>Actions:<\/b>/)) {
+      const summaryMatch = emailSummary.match(/<b>Summary:<\/b>\s*([^<]*)/);
+      const actionsMatch = emailSummary.match(/<b>Actions:<\/b>\s*([^<]*)/);
+      const summaryText = summaryMatch ? summaryMatch[1].trim() : '';
+      let actionsText = actionsMatch ? actionsMatch[1].trim() : '';
+      let actionsHtml = '';
+      if (actionsText) {
+        // Split on numbered or bulleted items, or newlines
+        const actionsArr = actionsText.split(/\n|\r|\d+\.\s|•\s|\u2022\s|\-/).filter(Boolean).map(item => item.trim()).filter(Boolean);
+        if (actionsArr.length > 0) {
+          actionsHtml = '<ul style="margin: 6px 0 10px 20px;">' + actionsArr.map(a => `<li>${a}</li>`).join('') + '</ul>';
+        } else {
+          actionsHtml = `<div>${actionsText}</div>`;
+        }
+      }
+      emailSummary = `<div style="margin-bottom: 8px;"><b>Summary:</b> ${summaryText}</div>` + (actionsHtml ? `<div style="color: #1a73e8;"><b>Actions:</b>${actionsHtml}</div>` : '');
+    }
+  } catch (e) {
+    Logger.log('sendSummaryDigestToEmail: Error in getEmailSummaryForLast24Hours:', e);
+    emailSummary = `<span style="color: red;">Error summarizing emails: ${e.message}</span>`;
+  }
+  body += `<div>${emailSummary}</div>`;
+
+  body += '</div>';
+
+  Logger.log('sendSummaryDigestToEmail: Final email body:', body);
 
   MailApp.sendEmail({
     to: recipient,
@@ -133,6 +199,7 @@ function runNightlyReview() {
 
   // 4) Send combined digest to Slack + email
   sendSummaryToSlackChannel(docSummaries, slackDigest, 'C08PVGETDD2');
+  Logger.log('=== ABOUT TO CALL sendSummaryDigestToEmail ===');
   sendSummaryDigestToEmail(docSummaries, slackDigest);
 
   logDebug('Nightly review completed');
@@ -264,31 +331,7 @@ function sendSummaryToSlackChannel(docSummaries, slackDigest, channelId) {
 /**
  * Sends the same summary via email to the script owner.
  */
-function sendSummaryDigestToEmail(docSummaries, slackDigest) {
-  const recipient = Session.getEffectiveUser().getEmail();
-  let body = '';
 
-  if (docSummaries.length) {
-    body += '📄 *Document Changes*\n\n';
-    docSummaries.forEach(s => {
-      body += `${s.title}\n${s.summary}\nAction Items: ${s.actions || 'None'}\n\n`;
-    });
-  } else {
-    body += '📄 No document changes detected.\n\n';
-  }
-
-  body += '💬 *Slack Summary*\n';
-  body += slackDigest.summary + '\n';
-  if (slackDigest.actions) {
-    body += `\nAction Items:\n${slackDigest.actions}\n`;
-  }
-
-  MailApp.sendEmail({
-    to: recipient,
-    subject: '🌙 Nightly Review',
-    htmlBody: body.replace(/\n/g, '<br>')
-  });
-}
 
 /**
  * Simple debug logger (only logs when DEBUG_LOGGING = 'true').
