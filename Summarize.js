@@ -167,6 +167,11 @@ function summarizeDocWithDelta(docId) {
  */
 function extractChunksFromDoc(doc) {
   const paras = doc.getBody().getParagraphs();
+  // Debug: Log each paragraph's text and heading type
+  paras.forEach(para => {
+    Logger.log(`"${para.getText()}" - Heading: ${para.getHeading()}`);
+  });
+  const paras = doc.getBody().getParagraphs();
   const chunks = [];
   let currentH1 = null;
   let currentH1Obj = null;
