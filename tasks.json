@@ -4,7 +4,7 @@
     {
       "label": "Auto Commit and Push",
       "type": "shell",
-      "command": "git add . && git commit -m 'auto commit' && git push",
+      "command": "git add . && (git diff --cached --quiet || git commit -m 'auto commit') && git push",
       "problemMatcher": [],
       "group": {
         "kind": "build",
